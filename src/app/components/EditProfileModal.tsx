@@ -3,6 +3,30 @@ import { useState } from "react";
 import { X, Camera, Save } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
+async function compressImage(file: File): Promise<File> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, 800 / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          URL.revokeObjectURL(url);
+          resolve(blob ? new File([blob], file.name, { type: "image/jpeg" }) : file);
+        },
+        "image/jpeg",
+        0.8
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 export function EditProfileModal({ onClose, profile, me, onSaved }: {
   onClose: () => void;
   profile: { username: string; full_name: string; avatar_url: string; bio: string } | null;
@@ -21,7 +45,6 @@ export function EditProfileModal({ onClose, profile, me, onSaved }: {
   const currentAvatar = preview || profile?.avatar_url || "";
 
   async function selectPhoto(file: File) {
-    // show preview immediately, upload on save
     setPendingFile(file);
     setPreview(URL.createObjectURL(file));
   }
@@ -32,11 +55,14 @@ export function EditProfileModal({ onClose, profile, me, onSaved }: {
     try {
       let nextAvatar = profile?.avatar_url ?? "";
       if (pendingFile) {
-        const path = me + "/avatar-" + Date.now() + "-" + pendingFile.name;
-        const { error } = await supabase.storage.from("posts").upload(path, pendingFile);
+        const compressed = await compressImage(pendingFile);
+        const path = me + "/avatar-" + Date.now() + "-" + compressed.name;
+        const { error } = await supabase.storage.from("posts").upload(path, compressed);
         if (error) throw error;
         const { data: { publicUrl } } = supabase.storage.from("posts").getPublicUrl(path);
         nextAvatar = publicUrl;
+      } else if (avatarUrl.trim()) {
+        nextAvatar = avatarUrl.trim();
       }
       const { error } = await supabase.from("profiles").update({ full_name: name, bio, avatar_url: nextAvatar }).eq("id", me);
       if (error) throw error;
@@ -55,7 +81,6 @@ export function EditProfileModal({ onClose, profile, me, onSaved }: {
         className="w-full max-w-[440px] bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 bg-zinc-950/50">
           <span className="text-sm text-zinc-500">Edit</span>
           <p className="font-bold text-lg">Edit profile</p>
@@ -65,7 +90,6 @@ export function EditProfileModal({ onClose, profile, me, onSaved }: {
         </div>
 
         <div className="p-5 flex flex-col gap-5">
-          {/* avatar */}
           <div className="flex flex-col items-center gap-3">
             <div className="relative">
               <div className="w-24 h-24 rounded-full bg-zinc-800 overflow-hidden flex items-center justify-center ring-4 ring-zinc-800">
@@ -83,7 +107,6 @@ export function EditProfileModal({ onClose, profile, me, onSaved }: {
             </p>
           </div>
 
-          {/* avatar URL paste option */}
           <div>
             <label className="text-xs font-semibold text-zinc-400">Avatar URL (optional)</label>
             <input
@@ -96,7 +119,6 @@ export function EditProfileModal({ onClose, profile, me, onSaved }: {
             <p className="mt-1 text-[11px] text-zinc-600">Paste an image link instead of uploading.</p>
           </div>
 
-          {/* name */}
           <div>
             <label className="text-xs font-semibold text-zinc-400">Name</label>
             <input
@@ -107,7 +129,6 @@ export function EditProfileModal({ onClose, profile, me, onSaved }: {
             />
           </div>
 
-          {/* bio */}
           <div>
             <label className="text-xs font-semibold text-zinc-400">Bio</label>
             <textarea
@@ -125,7 +146,6 @@ export function EditProfileModal({ onClose, profile, me, onSaved }: {
 
           {error && <p className="text-sm text-red-400 text-center">{error}</p>}
 
-          {/* actions */}
           <div className="flex gap-2">
             <button
               onClick={onClose}

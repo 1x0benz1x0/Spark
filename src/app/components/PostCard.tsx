@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Heart, Trash2, X, RefreshCw, Bookmark } from "lucide-react";
+import { Heart, Trash2, X, RefreshCw, Bookmark, Languages } from "lucide-react";
 import { CrownIcon, VerifiedBadge, AdminBadge } from "./Badges";
 import { PostVideo } from "./PostVideo";
+import { useI18n, type LangCode } from "@/lib/i18n";
 
 export interface Post {
   id: string;
@@ -28,6 +29,7 @@ function timeAgo(date: string) {
 
 export function PostCard({ post, currentUserId, onChange }: { post: Post; currentUserId: string | null; onChange: () => void }) {
   const supabase = createClient();
+  const { lang, translate, isTranslating } = useI18n();
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [saved, setSaved] = useState(false);
@@ -36,10 +38,48 @@ export function PostCard({ post, currentUserId, onChange }: { post: Post; curren
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [isAdminOrOwner, setIsAdminOrOwner] = useState(false);
+  const [captionShown, setCaptionShown] = useState(false);
+  const [captionTranslated, setCaptionTranslated] = useState("");
+  const [commentShown, setCommentShown] = useState<Record<string, boolean>>({});
+  const [commentTranslated, setCommentTranslated] = useState<Record<string, string>>({});
+  const [commentBusy, setCommentBusy] = useState<Record<string, boolean>>({});
 
   async function goToProfile(username: string) {
     const { data } = await supabase.from("profiles").select("id").eq("username", username).maybeSingle();
     if (data?.id) window.location.href = `/user/${data.id}`;
+  }
+
+  async function translateCaption() {
+    if (!post.caption) return;
+    const src: LangCode = "en";
+    const tgt: LangCode = lang === "es" ? "es" : "en";
+    if (src === tgt) { setCaptionTranslated(post.caption); setCaptionShown(true); return; }
+    try {
+      const res = await translate(post.caption, src, tgt);
+      setCaptionTranslated(res.text);
+      setCaptionShown(true);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Translation failed");
+    }
+  }
+
+  async function translateComment(id: string) {
+    const c = comments.find((x) => x.id === id);
+    if (!c) return;
+    setCommentBusy((b) => ({ ...b, [id]: true }));
+    try {
+      const res = await translate(c.content, "en", lang === "es" ? "es" : "en");
+      setCommentTranslated((s) => ({ ...s, [id]: res.text }));
+      setCommentShown((s) => ({ ...s, [id]: true }));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Translation failed");
+    } finally {
+      setCommentBusy((b) => {
+        const next = { ...b };
+        delete next[id];
+        return next;
+      });
+    }
   }
 
   function renderMentions(text: string) {
@@ -199,7 +239,18 @@ export function PostCard({ post, currentUserId, onChange }: { post: Post; curren
       </div>
       {likeCount > 0 && <p className="pt-2 px-1 text-sm font-semibold">{likeCount} like{likeCount === 1 ? "" : "s"}</p>}
       {post.caption && (
-        <p className="px-1 pt-1 text-sm"><span className="font-semibold mr-2 inline-flex items-center gap-1">{post.profiles?.username}{post.profiles?.is_owner && <CrownIcon className="w-3.5 h-3.5" />}{post.profiles?.verified && !post.profiles?.is_owner && <VerifiedBadge className="w-3.5 h-3.5" />}</span>{renderMentions(post.caption)}</p>
+        <p className="px-1 pt-1 text-sm">
+          <span className="font-semibold mr-2 inline-flex items-center gap-1">{post.profiles?.username}{post.profiles?.is_owner && <CrownIcon className="w-3.5 h-3.5" />}{post.profiles?.verified && !post.profiles?.is_owner && <VerifiedBadge className="w-3.5 h-3.5" />}</span>
+          {renderMentions(captionShown ? captionTranslated : post.caption)}
+          <button
+            onClick={translateCaption}
+            className="ml-2 inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 align-middle"
+            title="Translate caption"
+          >
+            <Languages className="w-3.5 h-3.5" />
+            {isTranslating(post.caption) ? "..." : captionShown ? "Original" : "Translate"}
+          </button>
+        </p>
       )}
       {comments.length > 0 && !showComments && (
         <button onClick={() => setShowComments(true)} className="px-1 pt-1 text-sm text-zinc-500">
@@ -212,7 +263,18 @@ export function PostCard({ post, currentUserId, onChange }: { post: Post; curren
             <button onClick={() => setShowComments(false)}><X className="w-4 h-4 text-zinc-500" /></button>
           </div>
           {comments.map((c) => (
-            <p key={c.id} className="text-sm py-0.5"><span className="font-semibold mr-2">{c.profiles?.username}</span>{renderMentions(c.content)}</p>
+            <p key={c.id} className="text-sm py-0.5 flex items-start gap-1">
+              <span className="font-semibold mr-2">{c.profiles?.username}</span>
+              <span className="flex-1">{renderMentions(commentShown[c.id] ? commentTranslated[c.id] ?? c.content : c.content)}</span>
+              <button
+                onClick={() => translateComment(c.id)}
+                className="shrink-0 inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 mt-[2px]"
+                title="Translate comment"
+              >
+                <Languages className="w-3.5 h-3.5" />
+                {commentBusy[c.id] ? "..." : commentShown[c.id] ? "Original" : "Translate"}
+              </button>
+            </p>
           ))}
           {currentUserId && (
             <div className="flex gap-2 pt-2">

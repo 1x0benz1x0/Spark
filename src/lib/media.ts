@@ -41,32 +41,29 @@ export async function isUnsupportedHevc(file: File): Promise<boolean> {
   return /hev1|hvc1|dvh1|dvh\w|hvcC|hevc/i.test(text);
 }
 
-/** Re-encode to universally-playable H.264 MP4 using ffmpeg.wasm (lazy-loaded, ~31 MB, cached by the browser). */
+/** Re-encode to universally-playable H.264 MP4 using ffmpeg.wasm (loaded lazily in a classic worker, ~9 MB wasm from CDN). */
 export async function transcodeToH264(file: File): Promise<File> {
-  const { FFmpeg } = await import("@ffmpeg/ffmpeg");
-  const { toBlobURL, fetchFile } = await import("@ffmpeg/util");
-  const ffmpeg = new FFmpeg();
-  const base = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd";
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
-    wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
-  });
+  const buf = new Uint8Array(await file.arrayBuffer());
   const ext = (file.name.split(".").pop() || "mp4").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp4";
-  await ffmpeg.writeFile(`input.${ext}`, await fetchFile(file));
-  await ffmpeg.exec([
-    "-i", `input.${ext}`,
-    "-t", String(MAX_MEDIA_SECONDS),
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-crf", "28",
-    "-vf", "scale=-2:480",
-    "-c:a", "aac",
-    "-movflags", "+faststart",
-    "output.mp4",
-  ]);
-  const data = await ffmpeg.readFile("output.mp4");
+  const data = await new Promise<Uint8Array>((resolve, reject) => {
+    const worker = new Worker("/ffmpeg-transcode-worker.js");
+    const timer = setTimeout(() => { worker.terminate(); reject(new Error("Transcode timed out")); }, 5 * 60 * 1000);
+    worker.onmessage = (e: MessageEvent) => {
+      clearTimeout(timer);
+      worker.terminate();
+      const msg = e.data;
+      if (msg?.ok) resolve(new Uint8Array(msg.output));
+      else reject(new Error(msg?.error || "Transcode failed"));
+    };
+    worker.onerror = (e) => {
+      clearTimeout(timer);
+      worker.terminate();
+      reject(new Error(e.message || "Transcode worker failed"));
+    };
+    worker.postMessage({ input: buf, ext }, [buf.buffer]);
+  });
   const name = file.name.replace(/\.[^.]+$/, "") + ".mp4";
-  return new File([data as BlobPart], name, { type: "video/mp4" });
+  return new File([data as unknown as BlobPart], name, { type: "video/mp4" });
 }
 
 async function prepareVideoFile(file: File): Promise<File> {

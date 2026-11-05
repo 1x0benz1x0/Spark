@@ -602,17 +602,14 @@ export default function MessagesPage() {
                       <span>{msgShown[m.id] ? msgTranslated[m.id] ?? m.content : m.content}</span>
                     )}
                   </div>
-                  {!m.content.startsWith("IMG:") && (
                     <button
                       onClick={() => translateMessage(m.id)}
-                      className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/60 border border-zinc-800 text-[11px] text-zinc-400 opacity-0 group-hover:opacity-100 transition focus:opacity-100 first-letter:uppercase"
-                      title="Translate message"
-                      aria-label="Translate message"
+                      className="shrink-0 p-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition"
+                      title={msgShown[m.id] ? "Show original" : "Translate"}
+                      aria-label={msgShown[m.id] ? "Show original" : "Translate"}
                     >
-                      <Languages className="w-3 h-3" />
-                      {msgBusy[m.id] ? "..." : msgShown[m.id] ? "Original" : "Translate"}
+                      <Languages className={`w-4 h-4 ${msgBusy[m.id] ? "animate-spin" : ""}`} />
                     </button>
-                  )}
                 </div>
               ))}
               <div ref={bottom} />

@@ -1,6 +1,5 @@
 "use client";
 import { useEffect } from "react";
-import { usePathname } from "next/navigation";
 
 function stopAllMedia() {
   document.querySelectorAll("video, audio").forEach((el) => {
@@ -12,9 +11,8 @@ function stopAllMedia() {
 }
 
 export function MediaStopper() {
-  const pathname = usePathname();
-
-  // Stop media when the browser tab is switched away / window hidden or blurred
+  // Stop media when the browser tab is switched away / window hidden or blurred.
+  // In-app navigation unmounts pages, which stops media on its own.
   useEffect(() => {
     function onVisibility() {
       if (document.visibilityState === "hidden") stopAllMedia();
@@ -31,12 +29,6 @@ export function MediaStopper() {
       window.removeEventListener("pagehide", stopAllMedia);
     };
   }, []);
-
-  // Stop media on in-app navigation too
-  useEffect(() => {
-    stopAllMedia();
-    return () => stopAllMedia();
-  }, [pathname]);
 
   return null;
 }

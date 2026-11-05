@@ -220,7 +220,7 @@ export function PostCard({ post, currentUserId, onChange }: { post: Post; curren
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addComment()}
-                placeholder="Add a comment…"
+                placeholder="Add a comment… (use @username to mention)"
                 className="flex-1 bg-transparent border-t border-zinc-800 py-2 text-sm outline-none"
               />
               <button onClick={addComment} className="text-blue-500 text-sm font-semibold">Post</button>

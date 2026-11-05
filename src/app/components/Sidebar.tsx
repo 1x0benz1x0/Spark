@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Home, Search, Heart, PlusSquare, User, MessageCircle, Zap, LogOut } from "lucide-react";
-import { CreateModal } from "./CreateModal";
 import { NotificationsPanel, enrichNotifications } from "./NotificationsPanel";
 import { readMe, signOutMe } from "@/lib/spark-auth";
 import { playPop } from "@/lib/sound";
@@ -15,7 +14,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [avatar, setAvatar] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
   const [me, setMe] = useState<string | null>(null);
@@ -119,20 +117,6 @@ export function Sidebar() {
               </div>
             </div>
           ))}
-          <Link
-            href="/create"
-            onMouseEnter={() => setHoveredItem("create")}
-            onMouseLeave={() => setHoveredItem(null)}
-            className="p-2 rounded-xl transition-all duration-200 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-900 hover:scale-110 relative"
-          >
-            <PlusSquare className="w-6 h-6" />
-            <div
-              className={`absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-zinc-800 text-white text-sm rounded-lg whitespace-nowrap pointer-events-none transition-all duration-200 z-50 ${hoveredItem === "create" ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2"}`}
-            >
-              Create
-              <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-zinc-800" />
-            </div>
-          </Link>
         </div>
 
         <div className="self-center pb-6">
@@ -200,14 +184,14 @@ export function Sidebar() {
           ].map((item) => {
             if (item.key === "create") {
               return (
-                <button
+                <Link
                   key="create"
-                  onClick={() => setShowCreate(true)}
+                  href="/create"
                   className="w-12 h-12 rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 flex items-center justify-center active:scale-90 transition-transform"
                   aria-label="Create post"
                 >
                   <PlusSquare className="w-6 h-6 text-white" />
-                </button>
+                </Link>
               );
             }
             const active = pathname === item.href;
@@ -230,7 +214,6 @@ export function Sidebar() {
         </div>
       </nav>
 
-      {showCreate && <CreateModal onClose={() => setShowCreate(false)} />}
       <NotificationsPanel open={showNotifs} onClose={() => setShowNotifs(false)} me={me} notifications={notifications} setNotifications={setNotifications} />
     </>
   );

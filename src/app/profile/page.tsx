@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { SparkLogo } from "../components/SparkLogo";
 import { Grid3x3, Bookmark, RefreshCw, User as UserIcon, Camera } from "lucide-react";
 import { Sidebar } from "../components/Sidebar";
-import { CreateModal } from "../components/CreateModal";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { EditProfileModal } from "../components/EditProfileModal";
 import { readMe } from "@/lib/spark-auth";
@@ -24,7 +23,6 @@ export default function ProfilePage() {
   const [followers, setFollowers] = useState(0);
   const [following, setFollowing] = useState(0);
   const [activeTab, setActiveTab] = useState<"posts" | "saved" | "reposts" | "tagged">("posts");
-  const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
@@ -182,7 +180,7 @@ export default function ProfilePage() {
                   </div>
                   <h2 className="text-[18px] md:text-[28px] font-bold text-[#F5F5F5] mb-2">Share Photos</h2>
                   <p className="text-[11px] md:text-[13px] text-[#F5F5F5]">When you share photos, they will appear on your profile.</p>
-                  <p onClick={() => setShowCreate(true)} className="text-[11px] md:text-[13px] text-[#4C9AFF] mt-2 cursor-pointer hover:underline">Share your first photo</p>
+                  <p onClick={() => router.push("/create")} className="text-[11px] md:text-[13px] text-[#4C9AFF] mt-2 cursor-pointer hover:underline">Share your first photo</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-1">
@@ -261,8 +259,6 @@ export default function ProfilePage() {
           </div>
         </main>
       </div>
-
-      {showCreate && <CreateModal onClose={() => { setShowCreate(false); router.refresh(); }} />}
 
       {selectedPost && (
         <PostDetailModal

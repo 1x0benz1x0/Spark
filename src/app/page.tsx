@@ -48,12 +48,10 @@ import { Heart, User } from "lucide-react";
 import { PostCard, Post } from "./components/PostCard";
 import { Sidebar } from "./components/Sidebar";
 import { CrownIcon, VerifiedBadge, AdminBadge } from "./components/Badges";
-import { CreateModal } from "./components/CreateModal";
 import { Stories } from "./components/Stories";
 
 export default function HomePage() {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [showCreate, setShowCreate] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [myProfile, setMyProfile] = useState<{ username: string; avatar_url: string } | null>(null);
   const [me, setMe] = useState<string | null>(null);
@@ -115,7 +113,7 @@ export default function HomePage() {
             <div className="text-center text-zinc-500 mt-16">
               <p className="text-lg mb-2">No posts yet</p>
               <p className="text-sm">Follow people or share your first photo.</p>
-              <button onClick={() => setShowCreate(true)} className="inline-block mt-4 px-4 py-2 bg-blue-500 rounded-lg text-sm font-semibold text-white">Create post</button>
+              <Link href="/create" className="inline-block mt-4 px-4 py-2 bg-blue-500 rounded-lg text-sm font-semibold text-white">Create post</Link>
             </div>
           )}
           {posts.map((p) => (
@@ -160,7 +158,6 @@ export default function HomePage() {
         </aside>
       </main>
 
-    {showCreate && <CreateModal onClose={() => { setShowCreate(false); loadPosts(); }} />}
     </div>
   );
 }

@@ -48,10 +48,23 @@ export default function CreatePage() {
     await supabase.from("posts").insert({ user_id: meData.id, image_url: publicUrl, caption, media_type: type });
     if (type === "video") {
       try {
-        const poster = await capturePoster(prepared, 800, 0.7);
-        if (poster) {
+        const url = URL.createObjectURL(prepared);
+        const vid = document.createElement("video");
+        vid.muted = true;
+        vid.playsInline = true;
+        vid.src = url;
+        await new Promise<void>((resolve) => { vid.onloadeddata = () => resolve(); vid.onerror = () => resolve(); });
+        vid.currentTime = 0.1;
+        await new Promise<void>((resolve) => { vid.onseeked = () => resolve(); vid.onerror = () => resolve(); });
+        const canvas = document.createElement("canvas");
+        canvas.width = vid.videoWidth || 800;
+        canvas.height = vid.videoHeight || 600;
+        canvas.getContext("2d")?.drawImage(vid, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.7));
+        if (blob) {
           const pPath = `${meData.id}/poster-${Date.now()}.jpg`;
-          await supabase.storage.from("posts").upload(pPath, poster, { contentType: "image/jpeg" });
+          await supabase.storage.from("posts").upload(pPath, blob, { contentType: "image/jpeg" });
           const { data: { publicUrl: posterUrl } } = supabase.storage.from("posts").getPublicUrl(pPath);
           await supabase.from("posts").update({ poster_url: posterUrl }).eq("image_url", publicUrl);
         }

@@ -7,8 +7,10 @@ import { CloudUpload, FileVideo2, Music, Image as ImageIcon, X } from "lucide-re
 import { readMe } from "@/lib/spark-auth";
 import { validateMediaDuration, MAX_MEDIA_SECONDS, prepareMediaFile } from "@/lib/media";
 import { formatToTall } from "@/lib/tall-format";
+import { useI18n } from "@/lib/i18n";
 
 export default function CreatePage() {
+  const { t } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
@@ -62,7 +64,6 @@ export default function CreatePage() {
     }
   }
 
-  // —— download a video from a link (like a TikTok/YouTube download) ——
   const DOWNLOAD_EXTS = ["mp4", "webm", "mov", "m4v", "ogg", "mp3", "wav", "m4a", "aac", "png", "jpg", "jpeg", "gif", "webp", "avif"];
 
   function classifyDownloadUrl(url: string): "video" | "image" | "audio" | null {
@@ -99,7 +100,6 @@ export default function CreatePage() {
       const fallbackExt = t === "video" ? ".mp4" : t === "image" ? ".jpg" : ".mp3";
       const name = fileNameFromUrl(url, "downloaded" + fallbackExt);
 
-      // Try fetching directly first; many hosts allow CORS, so this often just works
       let data: ArrayBuffer | null = null;
       let mime = "";
       try {
@@ -110,7 +110,6 @@ export default function CreatePage() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (!msg.startsWith("Couldn't fetch")) {
-          // likely a CORS block — fall back to a same-origin proxy route
           data = null;
         } else {
           throw e;
@@ -232,14 +231,12 @@ export default function CreatePage() {
 
   return (
     <div className="min-h-screen bg-black text-white md:ml-[72px]">
-      {/* header */}
       <div className="flex items-center gap-4 px-6 py-4 border-b border-zinc-800">
-        <h1 className="text-2xl font-bold">Upload video</h1>
-        <span className="text-sm text-zinc-500">Post a video to your account</span>
+        <h1 className="text-2xl font-bold">{t("create.upload")}</h1>
+        <span className="text-sm text-zinc-500">{t("create.postacc")}</span>
       </div>
 
       <div className="max-w-[1100px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8">
-        {/* LEFT: upload area */}
         <div
           {...getRootProps()}
           className={`relative border-2 border-dashed rounded-2xl flex flex-col items-center justify-center min-h-[540px] p-8 transition-colors ${
@@ -250,25 +247,25 @@ export default function CreatePage() {
           {processing ? (
             <div className="flex flex-col items-center gap-4">
               <div className="w-12 h-12 border-4 border-zinc-700 border-t-blue-500 rounded-full animate-spin" />
-              <p className="text-lg font-semibold">Turning video tall...</p>
-              <p className="text-sm text-zinc-500 text-center max-w-[280px]">Resizing to vertical format so it plays everywhere.</p>
+              <p className="text-lg font-semibold">{t("upload.tall")}</p>
+              <p className="text-sm text-zinc-500 text-center max-w-[280px]">{t("upload.tallSub")}</p>
             </div>
           ) : !file && !preview ? (
             <div className="flex flex-col items-center w-full">
               <CloudUpload className="w-16 h-16 text-zinc-500" />
-              <p className="mt-4 text-xl font-semibold">Select video to upload</p>
-              <p className="mt-1 text-sm text-zinc-500">Or drag and drop a file</p>
+              <p className="mt-4 text-xl font-semibold">{t("create.select")}</p>
+              <p className="mt-1 text-sm text-zinc-500">{t("create.dragdrop")}</p>
               <div className="mt-6 flex gap-4 text-xs text-zinc-500">
                 <span className="flex items-center gap-1"><FileVideo2 className="w-4 h-4" /> MP4 / WebM</span>
                 <span className="flex items-center gap-1"><ImageIcon className="w-4 h-4" /> PNG / JPG</span>
                 <span className="flex items-center gap-1"><Music className="w-4 h-4" /> MP3</span>
               </div>
-              <p className="mt-4 text-xs text-zinc-600">Less than 2GB â€¢ 720x1280 or higher â€¢ {sizeMb} MB</p>
-              <div className="mt-6 px-6 py-2.5 bg-blue-500 rounded-full text-sm font-semibold text-white">Select video</div>
+              <p className="mt-4 text-xs text-zinc-600">Less than 2GB • 720x1280 or higher • {sizeMb} MB</p>
+              <div className="mt-6 px-6 py-2.5 bg-blue-500 rounded-full text-sm font-semibold text-white">{t("create.select")}</div>
 
               <div className="mt-8 w-full max-w-[460px] border-t border-zinc-800 pt-6" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                <p className="text-sm font-semibold text-center">Or download from a link</p>
-                <p className="mt-1 text-xs text-zinc-500 text-center">Paste a video/image/audio file URL â€” Spark downloads it and posts it. Like a TikTok/YouTube downloader.</p>
+                <p className="text-sm font-semibold text-center">{t("upload.orlink")}</p>
+                <p className="mt-1 text-xs text-zinc-500 text-center">{t("upload.linksub")}</p>
                 <div className="mt-3 flex gap-2">
                   <input
                     value={linkUrl}
@@ -282,7 +279,7 @@ export default function CreatePage() {
                     disabled={downloading || processing || !linkUrl.trim()}
                     className="shrink-0 px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold disabled:opacity-40"
                   >
-                    {downloading ? "Downloading..." : "Download & post"}
+                    {downloading ? t("upload.downloading") : t("create.skipUpload")}
                   </button>
                 </div>
                 {linkError && <p className="mt-2 text-xs text-red-400 text-center">{linkError}</p>}
@@ -310,19 +307,18 @@ export default function CreatePage() {
               >
                 <X className="w-5 h-5" />
               </button>
-              <p className="mt-4 text-sm text-zinc-400">{file!.name} â€¢ {sizeMb} MB</p>
+              <p className="mt-4 text-sm text-zinc-400">{file!.name} • {sizeMb} MB</p>
             </>
           )}
         </div>
 
-        {/* RIGHT: details */}
         <div className="flex flex-col gap-5">
           <div>
-            <label className="text-sm font-semibold">Caption</label>
+            <label className="text-sm font-semibold">{t("create.caption")}</label>
             <textarea
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              placeholder="Describe your video"
+              placeholder={t("create.captionph")}
               rows={4}
               maxLength={2200}
               className="mt-2 w-full px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-sm outline-none resize-none focus:border-blue-500 transition"
@@ -334,7 +330,7 @@ export default function CreatePage() {
           </div>
 
           <div>
-            <label className="text-sm font-semibold">Tags</label>
+            <label className="text-sm font-semibold">{t("create.tags")}</label>
             <div className="mt-2 flex flex-wrap gap-2">
               {["#mchs", "#school", "#funny", "#fyp"].map((tag) => (
                 <button
@@ -349,7 +345,7 @@ export default function CreatePage() {
           </div>
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-            <label className="text-sm font-semibold">Who can watch this video</label>
+            <label className="text-sm font-semibold">{t("create.whowatch")}</label>
             <select
               value={whoCanWatch}
               onChange={(e) => setWhoCanWatch(e.target.value)}
@@ -366,14 +362,14 @@ export default function CreatePage() {
               onClick={() => { setFile(null); setPreview(null); setCaption(""); setTags([]); }}
               className="flex-1 py-3 rounded-full bg-[#26292D] hover:bg-[#363A3F] text-sm font-semibold text-white transition-colors"
             >
-              Discard
+              {t("common.discard")}
             </button>
             <button
               onClick={submit}
               disabled={busy || processing || !file}
               className="flex-1 py-3 rounded-full bg-blue-500 hover:bg-blue-600 text-sm font-semibold text-white transition-colors disabled:opacity-40"
             >
-              {busy ? "Posting..." : processing ? "Converting..." : "Post"}
+              {busy ? "Posting..." : processing ? "Converting..." : t("common.post")}
             </button>
           </div>
         </div>

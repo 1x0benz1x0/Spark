@@ -21,6 +21,10 @@ const UI: Record<LangCode, Record<string, string>> = {
     "common.cancel": "Cancel",
     "common.english": "English",
     "common.spanish": "Español",
+    "common.translating": "Translating...",
+    "common.translatedFrom": "Translated from English",
+    "common.original": "Show original",
+    "common.translate": "Translate",
     "feed.yourmessages": "Your messages",
     "feed.picksomeone": "Pick someone to start a chat",
     "create.upload": "Upload video",
@@ -69,6 +73,10 @@ const UI: Record<LangCode, Record<string, string>> = {
     "common.cancel": "Cancelar",
     "common.english": "English",
     "common.spanish": "Español",
+    "common.translating": "Traduciendo...",
+    "common.translatedFrom": "Traducido del inglés",
+    "common.original": "Mostrar original",
+    "common.translate": "Traducir",
     "feed.yourmessages": "Tus mensajes",
     "feed.picksomeone": "Elige a alguien para empezar un chat",
     "create.upload": "Subir video",
@@ -106,9 +114,11 @@ interface I18nCtx {
   lang: LangCode;
   setLang: (l: LangCode) => void;
   t: (key: string) => string;
+  translate: (text: string, source: LangCode, target: LangCode) => Promise<{ text: string; detected?: string }>;
+  isTranslating: (text: string) => boolean;
 }
 
-const Ctx = createContext<I18nCtx>({ lang: "en", setLang: () => {}, t: (k: string) => k });
+const Ctx = createContext<I18nCtx>({ lang: "en", setLang: () => {}, t: (k: string) => k, translate: async () => ({ text: "" }), isTranslating: () => false });
 
 export const useI18n = () => useContext(Ctx);
 
@@ -116,6 +126,8 @@ const storageKey = "spark-lang";
 
 export function LangProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<LangCode>("en");
+  const [cache, setCache] = useState<Map<string, { text: string; detected?: string }>>(new Map());
+  const [pending, setPending] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -132,7 +144,52 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const t = useCallback((key: string) => UI[lang]?.[key] ?? UI.en[key] ?? key, [lang]);
-  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
+
+  const translate = useCallback(
+    async (text: string, source: LangCode, target: LangCode) => {
+      const cacheKey = `${source}->${target}:${text}`;
+      const hit = cache.get(cacheKey);
+      if (hit) return hit;
+      setPending((p) => new Set(p).add(cacheKey));
+      try {
+        const res = await fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, source, target }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || `Translate failed (${res.status})`);
+        }
+        const data = (await res.json()) as { text: string; detected?: string };
+        setCache((c) => {
+          const next = new Map(c);
+          next.set(cacheKey, data);
+          return next;
+        });
+        return data;
+      } finally {
+        setPending((p) => {
+          const next = new Set(p);
+          next.delete(cacheKey);
+          return next;
+        });
+      }
+    },
+    [cache],
+  );
+
+  const isTranslating = useCallback(
+    (text: string) => {
+      for (const k of pending) {
+        if (k.endsWith(`:${text}`)) return true;
+      }
+      return false;
+    },
+    [pending],
+  );
+
+  const value = useMemo(() => ({ lang, setLang, t, translate, isTranslating }), [lang, setLang, t, translate, isTranslating]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -17,6 +17,9 @@ export function PostVideo({ src, poster }: { src: string; poster?: string }) {
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(true);
   const [rate, setRate] = useState(1);
+  const [wide, setWide] = useState(false);
+  const [errored, setError] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const video = () => videoRef.current;
 
@@ -58,10 +61,16 @@ export function PostVideo({ src, poster }: { src: string; poster?: string }) {
 
   const progress = duration > 0 ? (time / duration) * 100 : 0;
 
+  // Wide/landscape videos get letterboxed in a 16:9 box; tall/vertical ones get 9:16.
+  // The video is always CENTERED with an explicit width/height, so a weird-aspect
+  // file can't overflow, stretch the card, or render as a black box.
+  const boxAspect = wide ? "aspect-video" : "aspect-[9/16]";
+  const videoSize = wide ? "w-full h-auto" : "h-full w-auto";
+
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-[4/5] max-h-[600px] bg-black overflow-hidden select-none"
+      className={`relative w-full ${boxAspect} max-h-[600px] bg-black overflow-hidden select-none`}
       onClick={togglePlay}
     >
       <video
@@ -71,13 +80,32 @@ export function PostVideo({ src, poster }: { src: string; poster?: string }) {
         muted
         playsInline
         loop
-        className="w-full h-full object-contain"
+        className={`${videoSize} object-contain relative left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2`}
         poster={poster}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget;
+          setDuration(v.duration);
+          setWide(v.videoWidth >= v.videoHeight);
+          setLoaded(true);
+        }}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
+        onError={() => setError(true)}
       />
+
+      {/* wide video note + codec-error fallback (very wide files can fail to render as frames on some ChromeOS devices) */}
+      {wide && loaded && !errored && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-black/70 text-white text-[11px] pointer-events-none">
+          Wide video — plays best full screen. Tap the fullscreen icon.
+        </div>
+      )}
+      {errored && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-zinc-950 text-center p-6">
+          <p className="text-sm text-zinc-300">This video can't play on this device.</p>
+          <p className="text-xs text-zinc-500 max-w-[280px]">It may be a wide/landscape file. On your phone: Settings → Camera → Formats → "Most Compatible", then record and post again.</p>
+        </div>
+      )}
 
       {/* bottom control bar */}
       <div

@@ -4,6 +4,7 @@ import { readMe } from "@/lib/spark-auth";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
+import { prepareMediaFile } from "@/lib/media";
 import { validateMediaDuration, MAX_MEDIA_SECONDS } from "@/lib/media";
 
 export function CreateModal({ onClose }: { onClose: () => void }) {
@@ -38,11 +39,24 @@ export function CreateModal({ onClose }: { onClose: () => void }) {
     setBusy(true);
     const meData = readMe();
     if (meData) {
-      const path = `${meData.id}/${Date.now()}-${file.name}`;
-      const { error } = await supabase.storage.from("posts").upload(path, file);
+      const prepared = await prepareMediaFile(file);
+      const type = mediaType(prepared);
+      const path = `${meData.id}/${Date.now()}-${prepared.name}`;
+      const { error } = await supabase.storage.from("posts").upload(path, prepared);
       if (!error) {
         const { data: { publicUrl } } = supabase.storage.from("posts").getPublicUrl(path);
-        await supabase.from("posts").insert({ user_id: meData.id, image_url: publicUrl, caption, media_type: mediaType(file) });
+        await supabase.from("posts").insert({ user_id: meData.id, image_url: publicUrl, caption, media_type: type });
+        if (type === "video") {
+          try {
+            const poster = await capturePoster(prepared, 800, 0.7);
+            if (poster) {
+              const pPath = `${meData.id}/poster-${Date.now()}.jpg`;
+              await supabase.storage.from("posts").upload(pPath, poster, { contentType: "image/jpeg" });
+              const { data: { publicUrl: posterUrl } } = supabase.storage.from("posts").getPublicUrl(pPath);
+              await supabase.from("posts").update({ poster_url: posterUrl }).eq("image_url", publicUrl);
+            }
+          } catch {}
+        }
       } else {
         alert(error.message);
       }

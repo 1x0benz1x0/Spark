@@ -183,7 +183,7 @@ function SparkVideo({ post, idx, liked, likeCount, commentCount, comments, comme
                       ? <img src={c.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
                       : <span className="text-xs font-bold">{c.profiles?.username?.[0]?.toUpperCase()}</span>}
                   </div>
-                  <p className="text-sm flex-1"><span className="font-semibold mr-2">{c.profiles?.username}</span>{c.content.split(/(@[a-zA-Z0-9_.-]+)/g).map((part: string, i: number) => part.startsWith("@") && part.length > 1 ? <button key={i} onClick={() => goToProfile(part.slice(1))} className="text-blue-400">@{part.slice(1)}</button> : part)}</p>
+                  <p className="text-sm flex-1"><span className="font-semibold mr-2">{c.profiles?.username}</span>{c.content.split(/(@[a-zA-Z0-9_.-]+)/g).map((part: string, i: number) => part.startsWith("@") && part.length > 1 ? <span key={i} onClick={(e) => { e.stopPropagation(); goToProfile(part.slice(1)); }} className="text-blue-400">@{part.slice(1)}</span> : part)}</p>
                 </div>
               ))}
             </div>
@@ -206,7 +206,7 @@ function SparkVideo({ post, idx, liked, likeCount, commentCount, comments, comme
             {post.profiles?.is_owner && <CrownIcon className="w-4 h-4" />}
             {post.profiles?.verified && !post.profiles?.is_owner && <VerifiedBadge className="w-4 h-4" />}
           </button>
-          {post.caption && <p className="text-sm mt-1 line-clamp-2">{post.caption.split(/(@[a-zA-Z0-9_.-]+)/g).map((part: string, i: number) => part.startsWith("@") && part.length > 1 ? <button key={i} onClick={() => goToProfile(part.slice(1))} className="text-blue-400">@{part.slice(1)}</button> : part)}</p>}
+          {post.caption && <p className="text-sm mt-1 line-clamp-2">{post.caption.split(/(@[a-zA-Z0-9_.-]+)/g).map((part: string, i: number) => part.startsWith("@") && part.length > 1 ? <span key={i} onClick={(e) => { e.stopPropagation(); goToProfile(part.slice(1)); }} className="text-blue-400">@{part.slice(1)}</span> : part)}</p>}
         </div>
       </div>
     </section>

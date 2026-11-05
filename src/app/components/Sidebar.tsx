@@ -64,6 +64,7 @@ export function Sidebar() {
   const navItems = [
     { key: "home", icon: <Home className="w-6 h-6" />, path: "/", label: "Home" },
     { key: "search", icon: <Search className="w-6 h-6" />, path: "/explore", label: "Search" },
+    { key: "create", icon: <PlusSquare className="w-6 h-6" />, path: "/create", label: "Create" },
     { key: "messages", icon: <MessageCircle className="w-6 h-6" />, path: "/messages", label: "Messages" },
     { key: "sparks", icon: <Zap className="w-6 h-6" />, path: "/sparks", label: "Sparks" },
     { key: "notifications", icon: <Heart className="w-6 h-6" />, path: null, label: "Notifications", action: () => setShowNotifs(true) },
@@ -118,8 +119,8 @@ export function Sidebar() {
               </div>
             </div>
           ))}
-          <button
-            onClick={() => setShowCreate(true)}
+          <Link
+            href="/create"
             onMouseEnter={() => setHoveredItem("create")}
             onMouseLeave={() => setHoveredItem(null)}
             className="p-2 rounded-xl transition-all duration-200 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-900 hover:scale-110 relative"
@@ -131,7 +132,7 @@ export function Sidebar() {
               Create
               <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-zinc-800" />
             </div>
-          </button>
+          </Link>
         </div>
 
         <div className="self-center pb-6">

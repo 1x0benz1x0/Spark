@@ -1,19 +1,35 @@
 "use client";
+import { useDropzone } from "react-dropzone";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { CloudUpload, FileVideo2, Music, Image as ImageIcon, X } from "lucide-react";
 import { readMe } from "@/lib/spark-auth";
-import { validateMediaDuration, prepareMediaFile } from "@/lib/media";
+import { validateMediaDuration, MAX_MEDIA_SECONDS, prepareMediaFile } from "@/lib/media";
 
 export default function CreatePage() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [whoCanWatch, setWhoCanWatch] = useState("Everyone");
   const [busy, setBusy] = useState(false);
   const supabase = createClient();
   const router = useRouter();
+
+  const { getRootProps, getInputProps, isDragActive, isDragAccept, isDragReject } = useDropzone({
+    accept: {
+      "image/*": [],
+      "video/*": [],
+      "audio/*": [],
+    },
+    maxFiles: 1,
+    noClick: !!file,
+    noKeyboard: !!file,
+    onDrop: (accepted) => {
+      if (accepted[0]) pickFile(accepted[0]);
+    },
+  });
 
   async function pickFile(f: File | null) {
     if (!f) { setFile(null); setPreview(null); return; }
@@ -35,21 +51,28 @@ export default function CreatePage() {
     return "image";
   }
 
+  function toggleTag(tag: string) {
+    setTags((prev) => {
+      if (prev.includes(tag)) return prev.filter((t) => t !== tag);
+      return [...prev, tag];
+    });
+  }
+
   async function submit() {
     if (!file) return;
     setBusy(true);
     const meData = readMe();
-    if (!meData) { router.push("/auth"); return; }
-    const prepared = await prepareMediaFile(file);
-    const type = mediaType(prepared);
-    const path = `${meData.id}/${Date.now()}-${prepared.name}`;
-    const { error: upErr } = await supabase.storage.from("posts").upload(path, prepared);
+    if (!meData) { setBusy(false); router.push("/auth"); return; }
+    const fullCaption = caption + (tags.length ? " " + tags.join(" ") : "");
+    const type = mediaType(file);
+    const path = `${meData.id}/${Date.now()}-${file.name}`;
+    const { error: upErr } = await supabase.storage.from("posts").upload(path, file);
     if (upErr) { alert(upErr.message); setBusy(false); return; }
     const { data: { publicUrl } } = supabase.storage.from("posts").getPublicUrl(path);
-    await supabase.from("posts").insert({ user_id: meData.id, image_url: publicUrl, caption, media_type: type });
+    await supabase.from("posts").insert({ user_id: meData.id, image_url: publicUrl, caption: fullCaption, media_type: type });
     if (type === "video") {
       try {
-        const url = URL.createObjectURL(prepared);
+        const url = URL.createObjectURL(file);
         const vid = document.createElement("video");
         vid.muted = true;
         vid.playsInline = true;
@@ -76,52 +99,128 @@ export default function CreatePage() {
   }
 
   const type = file ? mediaType(file) : null;
+  const sizeMb = file ? (file.size / 1024 / 1024).toFixed(1) : "0";
 
   return (
-    <div className="min-h-screen bg-black text-white max-w-[470px] mx-auto md:border-x md:border-zinc-800">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 sticky top-0 bg-black z-10">
-        <Link href="/" className="p-1 hover:opacity-70"><ArrowLeft className="w-6 h-6" /></Link>
-        <h1 className="font-semibold">New post</h1>
-        <button onClick={submit} disabled={busy || !file} className="text-blue-500 font-semibold disabled:opacity-40">
-          {busy ? "Sharing…" : "Share"}
-        </button>
+    <div className="min-h-screen bg-black text-white md:ml-[72px]">
+      {/* header */}
+      <div className="flex items-center gap-4 px-6 py-4 border-b border-zinc-800">
+        <h1 className="text-2xl font-bold">Upload video</h1>
+        <span className="text-sm text-zinc-500">Post a video to your account</span>
       </div>
 
-      {/* Media area */}
-      <div className="aspect-square bg-zinc-900 flex items-center justify-center relative overflow-hidden">
-        {preview
-          ? (
-            type === "video"
-              ? <video src={preview} className="w-full h-full object-contain" controls autoPlay />
-              : type === "audio"
-                ? (
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-28 h-28 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center">
-                      <svg className="w-12 h-12 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55c-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4V7h4V3h-6z" /></svg>
-                    </div>
-                    <audio src={preview} controls autoPlay className="w-64" />
+      <div className="max-w-[1100px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8">
+        {/* LEFT: upload area */}
+        <div
+          {...getRootProps()}
+          className={`relative border-2 border-dashed rounded-2xl flex flex-col items-center justify-center min-h-[540px] p-8 transition-colors ${
+            isDragActive ? "border-blue-400 bg-blue-500/5" : "border-zinc-700 hover:border-zinc-500"
+          }`}
+        >
+          <input {...getInputProps()} />
+          {!file ? (
+            <>
+              <CloudUpload className="w-16 h-16 text-zinc-500" />
+              <p className="mt-4 text-xl font-semibold">Select video to upload</p>
+              <p className="mt-1 text-sm text-zinc-500">Or drag and drop a file</p>
+              <div className="mt-6 flex gap-4 text-xs text-zinc-500">
+                <span className="flex items-center gap-1"><FileVideo2 className="w-4 h-4" /> MP4 / WebM</span>
+                <span className="flex items-center gap-1"><ImageIcon className="w-4 h-4" /> PNG / JPG</span>
+                <span className="flex items-center gap-1"><Music className="w-4 h-4" /> MP3</span>
+              </div>
+              <p className="mt-4 text-xs text-zinc-600">Less than 2GB • 720x1280 or higher • {sizeMb} MB</p>
+              <div className="mt-6 px-6 py-2.5 bg-blue-500 rounded-full text-sm font-semibold text-white">Select video</div>
+            </>
+          ) : (
+            <>
+              {type === "video" ? (
+                <video src={preview!} controls autoPlay className="w-full max-h-[500px] rounded-xl" />
+              ) : type === "audio" ? (
+                <div className="flex flex-col items-center gap-4 p-6">
+                  <div className="w-28 h-28 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center">
+                    <Music className="w-12 h-12 text-white" />
                   </div>
-                )
-                : <img src={preview} alt="" className="w-full h-full object-cover" />
-          )
-          : (
-            <label className="cursor-pointer flex flex-col items-center gap-3 text-zinc-400">
-              <div className="w-20 h-20 rounded-full border-2 border-dashed border-zinc-600 flex items-center justify-center text-3xl hover:border-blue-500 hover:text-blue-500 transition">+</div>
-              <p className="text-sm">Select a photo, video or audio</p>
-              <input type="file" accept="image/*,video/*,audio/*" className="hidden" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
-            </label>
+                  <audio src={preview!} controls autoPlay className="w-64" />
+                </div>
+              ) : (
+                <img src={preview!} alt="" className="w-full max-h-[500px] object-contain rounded-xl" />
+              )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); pickFile(null); }}
+                className="absolute top-4 right-4 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white"
+                aria-label="Remove file"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <p className="mt-4 text-sm text-zinc-400">{file.name} • {sizeMb} MB</p>
+            </>
           )}
-      </div>
+        </div>
 
-      {/* Caption */}
-      <textarea
-        value={caption}
-        onChange={(e) => setCaption(e.target.value)}
-        placeholder="Write a caption..."
-        rows={3}
-        className="w-full px-4 py-3 bg-transparent text-sm outline-none resize-none border-b border-zinc-800 focus:border-zinc-600 transition"
-      />
+        {/* RIGHT: details */}
+        <div className="flex flex-col gap-5">
+          <div>
+            <label className="text-sm font-semibold">Caption</label>
+            <textarea
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="Describe your video"
+              rows={4}
+              maxLength={2200}
+              className="mt-2 w-full px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-sm outline-none resize-none focus:border-blue-500 transition"
+            />
+            <div className="flex justify-between mt-1 text-xs text-zinc-500">
+              <span>Hashtags and @mentions</span>
+              <span>{caption.length}/2200</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold">Tags</label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {["#mchs", "#school", "#funny", "#fyp"].map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className={`text-xs px-3 py-1.5 rounded-full transition ${tags.includes(tag) ? "bg-blue-500 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+            <label className="text-sm font-semibold">Who can watch this video</label>
+            <select
+              value={whoCanWatch}
+              onChange={(e) => setWhoCanWatch(e.target.value)}
+              className="mt-2 w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm outline-none"
+            >
+              <option>Everyone</option>
+              <option>Followers</option>
+              <option>Only me</option>
+            </select>
+          </div>
+
+          <div className="flex gap-3 mt-auto pt-2">
+            <button
+              onClick={() => { setFile(null); setPreview(null); setCaption(""); setTags([]); }}
+              className="flex-1 py-3 rounded-full bg-[#26292D] hover:bg-[#363A3F] text-sm font-semibold text-white transition-colors"
+            >
+              Discard
+            </button>
+            <button
+              onClick={submit}
+              disabled={busy || !file}
+              className="flex-1 py-3 rounded-full bg-blue-500 hover:bg-blue-600 text-sm font-semibold text-white transition-colors disabled:opacity-40"
+            >
+              {busy ? "Posting…" : "Post"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

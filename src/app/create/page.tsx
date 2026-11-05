@@ -14,7 +14,7 @@ export default function CreatePage() {
   const [linkUrl, setLinkUrl] = useState("");
   const [linkType, setLinkType] = useState<"video" | "image" | "audio" | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
-  const [checkingLink, setCheckingLink] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [caption, setCaption] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [whoCanWatch, setWhoCanWatch] = useState("Everyone");
@@ -62,60 +62,108 @@ export default function CreatePage() {
     }
   }
 
-  function detectLinkType(url: string): "video" | "image" | "audio" | null {
+  // —— download a video from a link (like a TikTok/YouTube download) ——
+  const DOWNLOAD_EXTS = ["mp4", "webm", "mov", "m4v", "ogg", "mp3", "wav", "m4a", "aac", "png", "jpg", "jpeg", "gif", "webp", "avif"];
+
+  function classifyDownloadUrl(url: string): "video" | "image" | "audio" | null {
     try {
       const u = new URL(url);
-      const ext = u.pathname.split(".").pop()?.toLowerCase() || "";
-      if (["mp4", "webm", "mov", "m4v", "ogg"].includes(ext)) return "video";
-      if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext)) return "image";
-      if (["mp3", "wav", "ogg", "aac", "m4a"].includes(ext)) return "audio";
+      const ext = u.pathname.split(".").pop()?.toLowerCase();
+      if (ext && DOWNLOAD_EXTS.includes(ext)) {
+        if (["mp4", "webm", "mov", "m4v", "ogg"].includes(ext)) return "video";
+        if (["mp3", "wav", "m4a", "aac"].includes(ext)) return "audio";
+        return "image";
+      }
+      const host = u.hostname.toLowerCase();
+      if (host.includes("tiktok") || host.includes("youtube") || host.includes("youtu.be") || host.includes("vimeo") || host.includes("instagram") || host.includes("twitter") || host.includes("x.com") || host.includes("facebook") || host.includes("reddit") || host.includes("twitch")) return "video";
     } catch {
       return null;
     }
     return null;
   }
 
-  function applyLink(url: string) {
-    const trimmed = url.trim();
-    setLinkUrl(trimmed);
-    setLinkError(null);
-    setLinkType(null);
-    if (!trimmed) return;
-    const t = detectLinkType(trimmed);
-    if (!t) {
-      setLinkError("Couldn't tell what that is. It needs to end in .mp4, .webm, .jpg, .png, .mp3... etc.");
-      return;
-    }
-    setLinkType(t);
-    setFile(null);
-    setPreview(trimmed);
+  function fileNameFromUrl(url: string, fallback: string): string {
+    try {
+      const u = new URL(url);
+      const base = decodeURIComponent(u.pathname.split("/").pop() || "");
+      if (base && base.includes(".")) return base;
+    } catch {}
+    return fallback;
   }
 
-  async function checkLink() {
+  async function downloadFromLink(url: string): Promise<File> {
+    setDownloading(true);
+    try {
+      const t = classifyDownloadUrl(url);
+      if (!t) throw new Error("That doesn't look like a direct video/image/audio file link. TikTok/YouTube pages need a direct file link (.mp4, .webm...) to download.");
+      const fallbackExt = t === "video" ? ".mp4" : t === "image" ? ".jpg" : ".mp3";
+      const name = fileNameFromUrl(url, "downloaded" + fallbackExt);
+
+      // Try fetching directly first; many hosts allow CORS, so this often just works
+      let data: ArrayBuffer | null = null;
+      let mime = "";
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Couldn't fetch that link (HTTP " + res.status + ")");
+        mime = res.headers.get("content-type") || "";
+        data = await res.arrayBuffer();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!msg.startsWith("Couldn't fetch")) {
+          // likely a CORS block — fall back to a same-origin proxy route
+          data = null;
+        } else {
+          throw e;
+        }
+      }
+      if (!data) {
+        const proxyUrl = "/api/proxy-download?url=" + encodeURIComponent(url);
+        const res2 = await fetch(proxyUrl);
+        if (!res2.ok) throw new Error("Couldn't fetch that link (HTTP " + res2.status + ")");
+        mime = res2.headers.get("content-type") || "";
+        data = await res2.arrayBuffer();
+      }
+      if (!data || data.byteLength === 0) throw new Error("That link came back empty.");
+      if (!mime || mime.includes("text/html")) mime = t === "video" ? "video/mp4" : t === "image" ? "image/jpeg" : "audio/mpeg";
+      const blob = new Blob([data], { type: mime });
+      return new File([blob], name, { type: mime });
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function useDownloadLink() {
     const url = linkUrl.trim();
     if (!url) return;
-    const t = detectLinkType(url);
-    if (!t) { setLinkError("Couldn't tell what that is. It needs to end in .mp4, .webm, .jpg, .png, .mp3... etc."); return; }
-    setCheckingLink(true);
     setLinkError(null);
+    setLinkType(null);
+    if (!classifyDownloadUrl(url)) {
+      setLinkError("Couldn't download that. It needs to be a direct video/image/audio file link (.mp4, .webm, .jpg, .mp3...).");
+      return;
+    }
+    setProcessing(true);
     try {
-      const res = await fetch(url, { method: "HEAD" });
-      const ct = res.headers.get("content-type") || "";
-      const first = ct.split("/")[0];
-      if (!["video", "image", "audio"].includes(first)) {
-        setLinkError(`That link is serving "${ct}" — Spark can only embed videos, images, or audio.`);
-        return;
+      const downloaded = await downloadFromLink(url);
+      if (downloaded.type.startsWith("video") || downloaded.type.startsWith("audio")) {
+        const { ok, duration } = await validateMediaDuration(downloaded);
+        if (!ok) {
+          setLinkError(`That media is too long (${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, "0")}). Max 1:30.`);
+          return;
+        }
       }
-      setLinkType(first as "video" | "image" | "audio");
-      setFile(null);
-      setPreview(url);
-    } catch {
-      // CORS often blocks the HEAD probe — fall back to the extension guess
-      setLinkType(t);
-      setFile(null);
-      setPreview(url);
+      const prepared = await prepareMediaFile(downloaded);
+      const tall = prepared.type.startsWith("video")
+        ? await formatToTall(prepared)
+        : prepared;
+      setFile(tall);
+      setPreview(URL.createObjectURL(tall));
+      setLinkUrl("");
+      setLinkType(null);
+      setLinkError(null);
+    } catch (e) {
+      setLinkError(e instanceof Error ? e.message : "Couldn't download that link.");
     } finally {
-      setCheckingLink(false);
+      setProcessing(false);
     }
   }
 
@@ -140,18 +188,6 @@ export default function CreatePage() {
   }
 
   async function submit() {
-    if (linkType && preview && !file) {
-      // link embed: post the URL directly
-      const meData = readMe();
-      if (!meData) { router.push("/auth"); return; }
-      setBusy(true);
-      const fullCaption = caption + (tags.length ? " " + tags.join(" ") : "");
-      const { error: insErr } = await supabase.from("posts").insert({ user_id: meData.id, image_url: preview, caption: fullCaption, media_type: linkType });
-      if (insErr) { alert(insErr.message); setBusy(false); return; }
-      setBusy(false);
-      router.push("/");
-      return;
-    }
     if (!file) return;
     setBusy(true);
     const meData = readMe();
@@ -231,52 +267,27 @@ export default function CreatePage() {
               <div className="mt-6 px-6 py-2.5 bg-blue-500 rounded-full text-sm font-semibold text-white">Select video</div>
 
               <div className="mt-8 w-full max-w-[460px] border-t border-zinc-800 pt-6" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                <p className="text-sm font-semibold text-center">Or paste a video / image / audio link</p>
-                <p className="mt-1 text-xs text-zinc-500 text-center">The post will embed that link directly â€” no file upload.</p>
+                <p className="text-sm font-semibold text-center">Or download from a link</p>
+                <p className="mt-1 text-xs text-zinc-500 text-center">Paste a video/image/audio file URL â€” Spark downloads it and posts it. Like a TikTok/YouTube downloader.</p>
                 <div className="mt-3 flex gap-2">
                   <input
                     value={linkUrl}
-                    onChange={(e) => applyLink(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && checkLink()}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && useDownloadLink()}
                     placeholder="https://example.com/video.mp4"
                     className="flex-1 min-w-0 px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-sm outline-none focus:border-blue-500"
                   />
                   <button
-                    onClick={checkLink}
-                    disabled={checkingLink || !linkUrl.trim()}
+                    onClick={useDownloadLink}
+                    disabled={downloading || processing || !linkUrl.trim()}
                     className="shrink-0 px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold disabled:opacity-40"
                   >
-                    {checkingLink ? "Checking..." : "Use link"}
+                    {downloading ? "Downloading..." : "Download & post"}
                   </button>
                 </div>
                 {linkError && <p className="mt-2 text-xs text-red-400 text-center">{linkError}</p>}
-                {linkType && !linkError && <p className="mt-2 text-xs text-green-400 text-center">Ready â€” it will post as a {linkType}. Hit Post when you are done.</p>}
               </div>
             </div>
-          ) : linkType && !file ? (
-            <>
-              {linkType === "video" ? (
-                <video src={preview!} controls autoPlay className="w-full max-h-[500px] rounded-xl" />
-              ) : linkType === "audio" ? (
-                <div className="flex flex-col items-center gap-4 p-6">
-                  <div className="w-28 h-28 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center">
-                    <Music className="w-12 h-12 text-white" />
-                  </div>
-                  <audio src={preview!} controls autoPlay className="w-64" />
-                </div>
-              ) : (
-                <img src={preview!} alt="" className="w-full max-h-[500px] object-contain rounded-xl" />
-              )}
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); removeLink(); }}
-                className="absolute top-4 right-4 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white"
-                aria-label="Remove link"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <p className="mt-4 text-sm text-zinc-400 break-all text-center max-w-[420px]">{preview}</p>
-            </>
           ) : (
             <>
               {type === "video" ? (

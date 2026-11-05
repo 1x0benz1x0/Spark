@@ -74,17 +74,30 @@ export function Stories() {
   useEffect(() => { load(); }, []);
 
   async function addStory(file: File) {
-    if (file.type.startsWith("video") || file.type.startsWith("audio")) {
-      const { ok, duration } = await validateMediaDuration(file);
-      if (!ok) {
-        alert(`Media is too long (${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, "0")}). Max 1:30.`);
-        return;
-      }
-    }
     setUploading(true);
     if (me) {
-      const { prepareMediaFile } = await import("@/lib/media");
-      const prepared = await prepareMediaFile(file);
+      const { prepareMediaFile, isUnsupportedHevc, transcodeToH264 } = await import("@/lib/media");
+      let work = file;
+      // iPhone HEVC → H.264 so it plays on every device
+      if (file.type.startsWith("video") && await isUnsupportedHevc(file)) {
+        try {
+          work = await transcodeToH264(file);
+        } catch (e) {
+          console.error("transcode failed", e);
+          alert("Couldn't convert this video in your browser. On your iPhone: Settings → Camera → Formats → 'Most Compatible', then record/share again.");
+          setUploading(false);
+          return;
+        }
+      }
+      if (work.type.startsWith("video") || work.type.startsWith("audio")) {
+        const { ok, duration } = await validateMediaDuration(work);
+        if (!ok) {
+          alert(`Media is too long (${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, "0")}). Max 1:30.`);
+          setUploading(false);
+          return;
+        }
+      }
+      const prepared = await prepareMediaFile(work);
       const path = `${me}/story-${Date.now()}-${prepared.name}`;
       const { error } = await supabase.storage.from("posts").upload(path, prepared);
       if (!error) {

@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 import { useDropzone } from "react-dropzone";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { CloudUpload, FileVideo2, Music, Image as ImageIcon, X } from "lucide-react";
 import { readMe } from "@/lib/spark-auth";
-import { validateMediaDuration, MAX_MEDIA_SECONDS, prepareMediaFile } from "@/lib/media";
+import { validateMediaDuration, MAX_MEDIA_SECONDS, prepareMediaFile, isUnsupportedHevc, transcodeToH264 } from "@/lib/media";
 
 export default function CreatePage() {
   const [file, setFile] = useState<File | null>(null);
@@ -14,6 +14,7 @@ export default function CreatePage() {
   const [tags, setTags] = useState<string[]>([]);
   const [whoCanWatch, setWhoCanWatch] = useState("Everyone");
   const [busy, setBusy] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const supabase = createClient();
   const router = useRouter();
 
@@ -33,16 +34,32 @@ export default function CreatePage() {
 
   async function pickFile(f: File | null) {
     if (!f) { setFile(null); setPreview(null); return; }
-    if (f.type.startsWith("video") || f.type.startsWith("audio")) {
-      const { ok, duration } = await validateMediaDuration(f);
-      if (!ok) {
-        alert(`Media is too long (${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, "0")}). Max 1:30.`);
-        return;
+    setProcessing(true);
+    try {
+      let work = f;
+      // iPhone HEVC â†’ H.264 first (ChromeOS can't decode it), then it's universally playable
+      if (f.type.startsWith("video") && await isUnsupportedHevc(f)) {
+        try {
+          work = await transcodeToH264(f);
+        } catch (e) {
+          console.error("transcode failed", e);
+          alert("Couldn't convert this video in your browser. On your iPhone: Settings â†’ Camera â†’ Formats â†’ 'Most Compatible', then record/share again.");
+          return;
+        }
       }
+      if (work.type.startsWith("video") || work.type.startsWith("audio")) {
+        const { ok, duration } = await validateMediaDuration(work);
+        if (!ok) {
+          alert(`Media is too long (${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, "0")}). Max 1:30.`);
+          return;
+        }
+      }
+      const prepared = await prepareMediaFile(work);
+      setFile(prepared);
+      setPreview(URL.createObjectURL(prepared));
+    } finally {
+      setProcessing(false);
     }
-    const prepared = await prepareMediaFile(f);
-    setFile(prepared);
-    setPreview(URL.createObjectURL(prepared));
   }
 
   function mediaType(f: File) {
@@ -118,7 +135,13 @@ export default function CreatePage() {
           }`}
         >
           <input {...getInputProps()} />
-          {!file ? (
+          {processing ? (
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 border-4 border-zinc-700 border-t-blue-500 rounded-full animate-spin" />
+              <p className="text-lg font-semibold">Optimizing videoâ€¦</p>
+              <p className="text-sm text-zinc-500 text-center max-w-[280px]">iPhone HEVC videos need a one-time conversion so they play everywhere. This can take up to a minute.</p>
+            </div>
+          ) : !file ? (
             <>
               <CloudUpload className="w-16 h-16 text-zinc-500" />
               <p className="mt-4 text-xl font-semibold">Select video to upload</p>
@@ -128,7 +151,7 @@ export default function CreatePage() {
                 <span className="flex items-center gap-1"><ImageIcon className="w-4 h-4" /> PNG / JPG</span>
                 <span className="flex items-center gap-1"><Music className="w-4 h-4" /> MP3</span>
               </div>
-              <p className="mt-4 text-xs text-zinc-600">Less than 2GB • 720x1280 or higher • {sizeMb} MB</p>
+              <p className="mt-4 text-xs text-zinc-600">Less than 2GB â€¢ 720x1280 or higher â€¢ {sizeMb} MB</p>
               <div className="mt-6 px-6 py-2.5 bg-blue-500 rounded-full text-sm font-semibold text-white">Select video</div>
             </>
           ) : (
@@ -153,7 +176,7 @@ export default function CreatePage() {
               >
                 <X className="w-5 h-5" />
               </button>
-              <p className="mt-4 text-sm text-zinc-400">{file.name} • {sizeMb} MB</p>
+              <p className="mt-4 text-sm text-zinc-400">{file.name} â€¢ {sizeMb} MB</p>
             </>
           )}
         </div>
@@ -213,10 +236,10 @@ export default function CreatePage() {
             </button>
             <button
               onClick={submit}
-              disabled={busy || !file}
+              disabled={busy || processing || !file}
               className="flex-1 py-3 rounded-full bg-blue-500 hover:bg-blue-600 text-sm font-semibold text-white transition-colors disabled:opacity-40"
             >
-              {busy ? "Posting…" : "Post"}
+              {busy ? "Posting..." : processing ? "Optimizing..." : "Post"}
             </button>
           </div>
         </div>

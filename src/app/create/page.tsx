@@ -11,6 +11,10 @@ import { formatToTall } from "@/lib/tall-format";
 export default function CreatePage() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkType, setLinkType] = useState<"video" | "image" | "audio" | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [checkingLink, setCheckingLink] = useState(false);
   const [caption, setCaption] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [whoCanWatch, setWhoCanWatch] = useState("Everyone");
@@ -34,7 +38,7 @@ export default function CreatePage() {
   });
 
   async function pickFile(f: File | null) {
-    if (!f) { setFile(null); setPreview(null); return; }
+    if (!f) { setFile(null); setPreview(null); setLinkUrl(""); setLinkType(null); setLinkError(null); return; }
     if (f.type.startsWith("video") || f.type.startsWith("audio")) {
       const { ok, duration } = await validateMediaDuration(f);
       if (!ok) {
@@ -50,9 +54,76 @@ export default function CreatePage() {
         : prepared;
       setFile(tall);
       setPreview(URL.createObjectURL(tall));
+      setLinkUrl("");
+      setLinkType(null);
+      setLinkError(null);
     } finally {
       setProcessing(false);
     }
+  }
+
+  function detectLinkType(url: string): "video" | "image" | "audio" | null {
+    try {
+      const u = new URL(url);
+      const ext = u.pathname.split(".").pop()?.toLowerCase() || "";
+      if (["mp4", "webm", "mov", "m4v", "ogg"].includes(ext)) return "video";
+      if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext)) return "image";
+      if (["mp3", "wav", "ogg", "aac", "m4a"].includes(ext)) return "audio";
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  function applyLink(url: string) {
+    const trimmed = url.trim();
+    setLinkUrl(trimmed);
+    setLinkError(null);
+    setLinkType(null);
+    if (!trimmed) return;
+    const t = detectLinkType(trimmed);
+    if (!t) {
+      setLinkError("Couldn't tell what that is. It needs to end in .mp4, .webm, .jpg, .png, .mp3... etc.");
+      return;
+    }
+    setLinkType(t);
+    setFile(null);
+    setPreview(trimmed);
+  }
+
+  async function checkLink() {
+    const url = linkUrl.trim();
+    if (!url) return;
+    const t = detectLinkType(url);
+    if (!t) { setLinkError("Couldn't tell what that is. It needs to end in .mp4, .webm, .jpg, .png, .mp3... etc."); return; }
+    setCheckingLink(true);
+    setLinkError(null);
+    try {
+      const res = await fetch(url, { method: "HEAD" });
+      const ct = res.headers.get("content-type") || "";
+      const first = ct.split("/")[0];
+      if (!["video", "image", "audio"].includes(first)) {
+        setLinkError(`That link is serving "${ct}" — Spark can only embed videos, images, or audio.`);
+        return;
+      }
+      setLinkType(first as "video" | "image" | "audio");
+      setFile(null);
+      setPreview(url);
+    } catch {
+      // CORS often blocks the HEAD probe — fall back to the extension guess
+      setLinkType(t);
+      setFile(null);
+      setPreview(url);
+    } finally {
+      setCheckingLink(false);
+    }
+  }
+
+  function removeLink() {
+    setLinkUrl("");
+    setLinkType(null);
+    setLinkError(null);
+    setPreview(null);
   }
 
   function mediaType(f: File) {
@@ -69,6 +140,18 @@ export default function CreatePage() {
   }
 
   async function submit() {
+    if (linkType && preview && !file) {
+      // link embed: post the URL directly
+      const meData = readMe();
+      if (!meData) { router.push("/auth"); return; }
+      setBusy(true);
+      const fullCaption = caption + (tags.length ? " " + tags.join(" ") : "");
+      const { error: insErr } = await supabase.from("posts").insert({ user_id: meData.id, image_url: preview, caption: fullCaption, media_type: linkType });
+      if (insErr) { alert(insErr.message); setBusy(false); return; }
+      setBusy(false);
+      router.push("/");
+      return;
+    }
     if (!file) return;
     setBusy(true);
     const meData = readMe();
@@ -131,11 +214,11 @@ export default function CreatePage() {
           {processing ? (
             <div className="flex flex-col items-center gap-4">
               <div className="w-12 h-12 border-4 border-zinc-700 border-t-blue-500 rounded-full animate-spin" />
-              <p className="text-lg font-semibold">Turning video tallâ€¦</p>
+              <p className="text-lg font-semibold">Turning video tall...</p>
               <p className="text-sm text-zinc-500 text-center max-w-[280px]">Resizing to vertical format so it plays everywhere.</p>
             </div>
-          ) : !file ? (
-            <>
+          ) : !file && !preview ? (
+            <div className="flex flex-col items-center w-full">
               <CloudUpload className="w-16 h-16 text-zinc-500" />
               <p className="mt-4 text-xl font-semibold">Select video to upload</p>
               <p className="mt-1 text-sm text-zinc-500">Or drag and drop a file</p>
@@ -146,6 +229,53 @@ export default function CreatePage() {
               </div>
               <p className="mt-4 text-xs text-zinc-600">Less than 2GB â€¢ 720x1280 or higher â€¢ {sizeMb} MB</p>
               <div className="mt-6 px-6 py-2.5 bg-blue-500 rounded-full text-sm font-semibold text-white">Select video</div>
+
+              <div className="mt-8 w-full max-w-[460px] border-t border-zinc-800 pt-6" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                <p className="text-sm font-semibold text-center">Or paste a video / image / audio link</p>
+                <p className="mt-1 text-xs text-zinc-500 text-center">The post will embed that link directly â€” no file upload.</p>
+                <div className="mt-3 flex gap-2">
+                  <input
+                    value={linkUrl}
+                    onChange={(e) => applyLink(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && checkLink()}
+                    placeholder="https://example.com/video.mp4"
+                    className="flex-1 min-w-0 px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-sm outline-none focus:border-blue-500"
+                  />
+                  <button
+                    onClick={checkLink}
+                    disabled={checkingLink || !linkUrl.trim()}
+                    className="shrink-0 px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold disabled:opacity-40"
+                  >
+                    {checkingLink ? "Checking..." : "Use link"}
+                  </button>
+                </div>
+                {linkError && <p className="mt-2 text-xs text-red-400 text-center">{linkError}</p>}
+                {linkType && !linkError && <p className="mt-2 text-xs text-green-400 text-center">Ready â€” it will post as a {linkType}. Hit Post when you are done.</p>}
+              </div>
+            </div>
+          ) : linkType && !file ? (
+            <>
+              {linkType === "video" ? (
+                <video src={preview!} controls autoPlay className="w-full max-h-[500px] rounded-xl" />
+              ) : linkType === "audio" ? (
+                <div className="flex flex-col items-center gap-4 p-6">
+                  <div className="w-28 h-28 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center">
+                    <Music className="w-12 h-12 text-white" />
+                  </div>
+                  <audio src={preview!} controls autoPlay className="w-64" />
+                </div>
+              ) : (
+                <img src={preview!} alt="" className="w-full max-h-[500px] object-contain rounded-xl" />
+              )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); removeLink(); }}
+                className="absolute top-4 right-4 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white"
+                aria-label="Remove link"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <p className="mt-4 text-sm text-zinc-400 break-all text-center max-w-[420px]">{preview}</p>
             </>
           ) : (
             <>
@@ -169,7 +299,7 @@ export default function CreatePage() {
               >
                 <X className="w-5 h-5" />
               </button>
-              <p className="mt-4 text-sm text-zinc-400">{file.name} â€¢ {sizeMb} MB</p>
+              <p className="mt-4 text-sm text-zinc-400">{file!.name} â€¢ {sizeMb} MB</p>
             </>
           )}
         </div>

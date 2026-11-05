@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useDropzone } from "react-dropzone";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { CloudUpload, FileVideo2, Music, Image as ImageIcon, X } from "lucide-react";
 import { readMe } from "@/lib/spark-auth";
 import { validateMediaDuration, MAX_MEDIA_SECONDS, prepareMediaFile } from "@/lib/media";
+import { formatToTall } from "@/lib/tall-format";
 
 export default function CreatePage() {
   const [file, setFile] = useState<File | null>(null);
@@ -14,6 +15,7 @@ export default function CreatePage() {
   const [tags, setTags] = useState<string[]>([]);
   const [whoCanWatch, setWhoCanWatch] = useState("Everyone");
   const [busy, setBusy] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const supabase = createClient();
   const router = useRouter();
 
@@ -40,9 +42,17 @@ export default function CreatePage() {
         return;
       }
     }
-    const prepared = await prepareMediaFile(f);
-    setFile(prepared);
-    setPreview(URL.createObjectURL(prepared));
+    setProcessing(true);
+    try {
+      const prepared = await prepareMediaFile(f);
+      const tall = prepared.type.startsWith("video")
+        ? await formatToTall(prepared)
+        : prepared;
+      setFile(tall);
+      setPreview(URL.createObjectURL(tall));
+    } finally {
+      setProcessing(false);
+    }
   }
 
   function mediaType(f: File) {
@@ -118,7 +128,13 @@ export default function CreatePage() {
           }`}
         >
           <input {...getInputProps()} />
-          {!file ? (
+          {processing ? (
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 border-4 border-zinc-700 border-t-blue-500 rounded-full animate-spin" />
+              <p className="text-lg font-semibold">Turning video tallâ€¦</p>
+              <p className="text-sm text-zinc-500 text-center max-w-[280px]">Resizing to vertical format so it plays everywhere.</p>
+            </div>
+          ) : !file ? (
             <>
               <CloudUpload className="w-16 h-16 text-zinc-500" />
               <p className="mt-4 text-xl font-semibold">Select video to upload</p>
@@ -128,7 +144,7 @@ export default function CreatePage() {
                 <span className="flex items-center gap-1"><ImageIcon className="w-4 h-4" /> PNG / JPG</span>
                 <span className="flex items-center gap-1"><Music className="w-4 h-4" /> MP3</span>
               </div>
-              <p className="mt-4 text-xs text-zinc-600">Less than 2GB • 720x1280 or higher • {sizeMb} MB</p>
+              <p className="mt-4 text-xs text-zinc-600">Less than 2GB â€¢ 720x1280 or higher â€¢ {sizeMb} MB</p>
               <div className="mt-6 px-6 py-2.5 bg-blue-500 rounded-full text-sm font-semibold text-white">Select video</div>
             </>
           ) : (
@@ -153,7 +169,7 @@ export default function CreatePage() {
               >
                 <X className="w-5 h-5" />
               </button>
-              <p className="mt-4 text-sm text-zinc-400">{file.name} • {sizeMb} MB</p>
+              <p className="mt-4 text-sm text-zinc-400">{file.name} â€¢ {sizeMb} MB</p>
             </>
           )}
         </div>
@@ -213,10 +229,10 @@ export default function CreatePage() {
             </button>
             <button
               onClick={submit}
-              disabled={busy || !file}
+              disabled={busy || processing || !file}
               className="flex-1 py-3 rounded-full bg-blue-500 hover:bg-blue-600 text-sm font-semibold text-white transition-colors disabled:opacity-40"
             >
-              {busy ? "Posting…" : "Post"}
+              {busy ? "Posting..." : processing ? "Converting..." : "Post"}
             </button>
           </div>
         </div>

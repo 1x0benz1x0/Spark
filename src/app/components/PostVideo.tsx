@@ -9,7 +9,7 @@ function formatTime(s: number) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-export function PostVideo({ src }: { src: string }) {
+export function PostVideo({ src, poster }: { src: string; poster?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(true);
@@ -72,6 +72,7 @@ export function PostVideo({ src }: { src: string }) {
         playsInline
         loop
         className="w-full h-full object-contain"
+        poster={poster}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onPlay={() => setPlaying(true)}

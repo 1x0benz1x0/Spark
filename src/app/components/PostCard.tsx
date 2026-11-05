@@ -218,8 +218,16 @@ export function PostCard({ post, currentUserId, onChange }: { post: Post; curren
             <div className="flex gap-2 pt-2">
               <input
                 value={newComment}
-*** error above (different oldString) ***
+                onChange={(e) => setNewComment(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addComment()}
+                placeholder="Add a comment…"
+                className="flex-1 bg-transparent border-t border-zinc-800 py-2 text-sm outline-none"
               />
               <button onClick={addComment} className="text-blue-500 text-sm font-semibold">Post</button>
             </div>
           )}
+        </div>
+      )}
+    </article>
+  );
+}

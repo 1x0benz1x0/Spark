@@ -83,11 +83,12 @@ export function Stories() {
     }
     setUploading(true);
     if (me) {
-      const path = `${me}/story-${Date.now()}-${file.name}`;
-      const { error } = await supabase.storage.from("posts").upload(path, file);
+      const prepared = await prepareMediaFile(file);
+      const path = `${me}/story-${Date.now()}-${prepared.name}`;
+      const { error } = await supabase.storage.from("posts").upload(path, prepared);
       if (!error) {
         const { data: { publicUrl } } = supabase.storage.from("posts").getPublicUrl(path);
-        const media_type = file.type.startsWith("video") ? "video" : file.type.startsWith("audio") ? "audio" : "image";
+        const media_type = prepared.type.startsWith("video") ? "video" : prepared.type.startsWith("audio") ? "audio" : "image";
         await supabase.from("stories").insert({ user_id: me, image_url: publicUrl, media_type });
         await load();
       } else {

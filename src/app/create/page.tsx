@@ -24,8 +24,9 @@ export default function CreatePage() {
         return;
       }
     }
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+    const prepared = await prepareMediaFile(f);
+    setFile(prepared);
+    setPreview(URL.createObjectURL(prepared));
   }
 
   function mediaType(f: File) {

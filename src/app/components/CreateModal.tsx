@@ -24,8 +24,10 @@ export function CreateModal({ onClose }: { onClose: () => void }) {
         return;
       }
     }
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+    // downscale FIRST so the preview shows the actual final size
+    const prepared = await prepareMediaFile(f);
+    setFile(prepared);
+    setPreview(URL.createObjectURL(prepared));
   }
 
   function mediaType(f: File) {

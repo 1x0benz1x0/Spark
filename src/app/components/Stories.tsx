@@ -83,6 +83,7 @@ export function Stories() {
     }
     setUploading(true);
     if (me) {
+      const { prepareMediaFile } = await import("@/lib/media");
       const prepared = await prepareMediaFile(file);
       const path = `${me}/story-${Date.now()}-${prepared.name}`;
       const { error } = await supabase.storage.from("posts").upload(path, prepared);

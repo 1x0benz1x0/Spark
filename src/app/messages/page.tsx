@@ -594,17 +594,20 @@ export default function MessagesPage() {
             <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
               {messages.length === 0 && <p className="text-center text-zinc-500 text-sm m-auto">Say hi</p>}
               {messages.map((m) => (
-                <div key={m.id} className={"group relative max-w-[70%] px-4 py-2 rounded-3xl text-sm " + (m.sender_id === me ? "self-end bg-blue-500 text-white" : "self-start bg-zinc-800")}>
-                  {m.content.startsWith("IMG:") ? (
-                    <img src={m.content.slice(4)} alt="" className="rounded-2xl max-w-full max-h-[300px] object-cover" />
-                  ) : (
-                    <span>{msgShown[m.id] ? msgTranslated[m.id] ?? m.content : m.content}</span>
-                  )}
+                <div key={m.id} className={"group flex items-end gap-2 max-w-[80%] " + (m.sender_id === me ? "self-end flex-row-reverse" : "self-start")}>
+                  <div className={"px-4 py-2 rounded-3xl text-sm " + (m.sender_id === me ? "bg-blue-500 text-white" : "bg-zinc-800")}>
+                    {m.content.startsWith("IMG:") ? (
+                      <img src={m.content.slice(4)} alt="" className="rounded-2xl max-w-full max-h-[300px] object-cover" />
+                    ) : (
+                      <span>{msgShown[m.id] ? msgTranslated[m.id] ?? m.content : m.content}</span>
+                    )}
+                  </div>
                   {!m.content.startsWith("IMG:") && (
                     <button
                       onClick={() => translateMessage(m.id)}
-                      className="absolute -top-2 -right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/80 border border-zinc-700 text-[10px] text-zinc-300 opacity-0 group-hover:opacity-100 transition focus:opacity-100 first-letter:uppercase"
+                      className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/60 border border-zinc-800 text-[11px] text-zinc-400 opacity-0 group-hover:opacity-100 transition focus:opacity-100 first-letter:uppercase"
                       title="Translate message"
+                      aria-label="Translate message"
                     >
                       <Languages className="w-3 h-3" />
                       {msgBusy[m.id] ? "..." : msgShown[m.id] ? "Original" : "Translate"}
